@@ -1,8 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
-use eframe::egui;
+use egui;
+use eframe;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::{self, Read, Write}};
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
@@ -13,11 +13,10 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Aster's Tasklist",
         options,
-        Box::new(|_cc| {
-            let tasks = MyApp::load_tasks().unwrap_or_else(|_| Vec::new());
-
+        Box::new(|cc| {
+            let tasks = eframe::get_value::<Vec<Task>>(cc.storage.unwrap(), "tasks_stored").unwrap_or_else(|| Vec::new());
             let app = MyApp {
-                tasks: tasks.clone(),
+                tasks: tasks,
                 ..Default::default()
             };
             Box::new(app)
@@ -39,25 +38,6 @@ impl Default for MyApp {
     }
 }
 
-impl MyApp {
-    fn load_tasks() -> io::Result<Vec<Task>> {
-        let mut file = File::open("tasks.json")?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        let tasks: Vec<Task> = serde_json::from_str(&contents)?;
-        Ok(tasks)
-    }
-
-    fn save_tasks(&mut self) -> io::Result<()> {
-        self.tasks.retain(|task| !task.completed);
-        let serialized_tasks = serde_json::to_string(&self.tasks).unwrap();
-
-        let mut file = File::create("tasks.json").expect("Failed to create/find tasks.json");
-        file.write(serialized_tasks.as_bytes()).expect("Failed to write tasks.json");
-        Ok(())
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone)]
 struct Task {
     name: String,
@@ -74,11 +54,12 @@ impl Task {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if let Err(err) = self.save_tasks() {
-            eprintln!("Failed to save tasks: {}", err);
-        }
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        self.tasks.retain(|task| !task.completed);
+        eframe::set_value(storage, "tasks_stored", &self.tasks);
+    }
 
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading(format!(
                 "Aster's Tasklist - {} task(s)",
@@ -93,7 +74,13 @@ impl eframe::App for MyApp {
                     self.new_task_name.clear()
                 }
             });
-            for task in &mut self.tasks {
+            // for loop with index so that way i can remove completed tasks
+            for i in (0..self.tasks.len()).rev() {
+                let task = &mut self.tasks[i];
+                if task.completed {
+                    self.tasks.remove(i);
+                    continue;
+                }
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut task.completed, "");
                     ui.label(format!("{}", &task.name));
