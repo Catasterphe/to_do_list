@@ -70,22 +70,26 @@ impl eframe::App for MyApp {
                 ui.text_edit_singleline(&mut self.new_task_name)
                     .labelled_by(new_task_label.id);
                 if ui.button("New Task").clicked() && !self.new_task_name.is_empty() {
-                    self.tasks.push(Task::new(self.new_task_name.clone()));
-                    self.new_task_name.clear()
+                    // take from the task name that way it empties and we get the task name at the same time 
+                    self.tasks.push(Task::new(std::mem::take(&mut self.new_task_name)));
                 }
             });
-            // for loop with index so that way i can remove completed tasks
             for i in (0..self.tasks.len()).rev() {
                 let task = &mut self.tasks[i];
-                if task.completed {
-                    self.tasks.remove(i);
-                    continue;
-                }
                 ui.horizontal(|ui| {
+                    // add one to the label that way it starts at 1 and not 0.
+                    ui.label((i + 1).to_string());
                     ui.checkbox(&mut task.completed, "");
                     ui.label(format!("{}", &task.name));
                 });
             }
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::LEFT), |ui| {
+                ui.horizontal(|ui: &mut egui::Ui| {
+                    egui::widgets::global_dark_light_mode_buttons(ui);
+                    ui.strong("Completed tasks delete upon closing.");
+                    ui.hyperlink_to("Source code", "https://github.com/Catasterphe/todo_list");
+                });
+            });
         });
     }
 }
